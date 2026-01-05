@@ -1,0 +1,31 @@
+name: E2E - Authentik v2024.8
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/core/**'
+      - 'e2e/providers/authentik/**'
+      - 'e2e/providers/shared-tests.ts'
+      - 'e2e/providers/types.ts'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/core/**'
+      - 'e2e/providers/authentik/**'
+      - 'e2e/providers/shared-tests.ts'
+      - 'e2e/providers/types.ts'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: authentik
+      version: v2024-8
+      port: '9024'
+      image: ghcr.io/goauthentik/server:2024.8.3

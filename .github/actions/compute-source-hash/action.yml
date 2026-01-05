@@ -1,0 +1,83 @@
+name: 'Compute Source Hash'
+description: 'Compute hashes of library source files for cache invalidation'
+
+outputs:
+  core-hash:
+    description: 'Hash of packages/core/src source files'
+    value: ${{ steps.compute.outputs.core }}
+  react-hash:
+    description: 'Hash of packages/react/src source files'
+    value: ${{ steps.compute.outputs.react }}
+  vue-hash:
+    description: 'Hash of packages/vue/src source files'
+    value: ${{ steps.compute.outputs.vue }}
+  svelte-hash:
+    description: 'Hash of packages/svelte/src source files'
+    value: ${{ steps.compute.outputs.svelte }}
+  config-hash:
+    description: 'Hash of TypeScript config files'
+    value: ${{ steps.compute.outputs.config }}
+  e2e-hash:
+    description: 'Hash of E2E test and infrastructure files'
+    value: ${{ steps.compute.outputs.e2e }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Compute source hashes
+      id: compute
+      shell: bash
+      run: |
+        # Function to compute hash of files matching pattern, excluding test files
+        compute_hash() {
+          local pattern="$1"
+          local exclude_pattern="${2:-}"
+
+          if [ -n "$exclude_pattern" ]; then
+            find . -path "$pattern" -type f ! -path "$exclude_pattern" 2>/dev/null | \
+              sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1
+          else
+            find . -path "$pattern" -type f 2>/dev/null | \
+              sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1
+          fi
+        }
+
+        # Compute core package hash (excluding tests and mocks)
+        CORE_HASH=$(find ./packages/core/src -name '*.ts' -type f \
+          ! -name '*.test.ts' ! -path '*/__mocks__/*' 2>/dev/null | \
+          sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "core=${CORE_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "Core hash: ${CORE_HASH:-empty}"
+
+        # Compute React package hash
+        REACT_HASH=$(find ./packages/react/src -name '*.ts' -o -name '*.tsx' -type f \
+          ! -name '*.test.ts' ! -name '*.test.tsx' 2>/dev/null | \
+          sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "react=${REACT_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "React hash: ${REACT_HASH:-empty}"
+
+        # Compute Vue package hash
+        VUE_HASH=$(find ./packages/vue/src -name '*.ts' -type f \
+          ! -name '*.test.ts' 2>/dev/null | \
+          sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "vue=${VUE_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "Vue hash: ${VUE_HASH:-empty}"
+
+        # Compute Svelte package hash
+        SVELTE_HASH=$(find ./packages/svelte/src -name '*.ts' -type f \
+          ! -name '*.test.ts' 2>/dev/null | \
+          sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "svelte=${SVELTE_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "Svelte hash: ${SVELTE_HASH:-empty}"
+
+        # Compute config hash (tsconfig files)
+        CONFIG_HASH=$(cat tsconfig.base.json packages/*/tsconfig.json 2>/dev/null | \
+          sha256sum | cut -d' ' -f1)
+        echo "config=${CONFIG_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "Config hash: ${CONFIG_HASH:-empty}"
+
+        # Compute E2E infrastructure hash (test files and configs)
+        E2E_HASH=$(find ./e2e -name '*.ts' -o -name '*.tsx' -o -name '*.json' -o -name '*.yml' -type f 2>/dev/null | \
+          sort | xargs -r cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+        echo "e2e=${E2E_HASH:-empty}" >> $GITHUB_OUTPUT
+        echo "E2E hash: ${E2E_HASH:-empty}"

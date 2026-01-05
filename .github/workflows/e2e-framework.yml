@@ -1,0 +1,374 @@
+name: E2E Framework Test (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      framework:
+        description: 'Framework name (react, vue, svelte)'
+        required: true
+        type: string
+      provider:
+        description: 'Provider name (keycloak or authentik)'
+        required: true
+        type: string
+      version:
+        description: 'Version identifier (e.g., v24, v2024-8)'
+        required: true
+        type: string
+      port:
+        description: 'Port the provider runs on'
+        required: true
+        type: string
+      image:
+        description: 'Docker image for the provider'
+        required: true
+        type: string
+      provider_url:
+        description: 'Provider URL for test app'
+        required: true
+        type: string
+      force-bypass-cache:
+        description: 'Force run tests even if cache indicates pass'
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      result:
+        description: 'Test result (pass/fail)'
+        value: ${{ jobs.keycloak.outputs.result || jobs.authentik.outputs.result }}
+
+jobs:
+  # Framework tests with Keycloak
+  keycloak:
+    name: ${{ inputs.framework }} + Keycloak ${{ inputs.version }}
+    if: inputs.provider == 'keycloak'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute source hashes
+        id: hashes
+        uses: ./.github/actions/compute-source-hash
+
+      - name: Check for cached test result
+        id: cache-check
+        if: ${{ !inputs.force-bypass-cache }}
+        uses: actions/cache@v4
+        with:
+          path: .cache-marker
+          key: e2e-result-${{ inputs.framework }}-keycloak-${{ inputs.version }}-${{ steps.hashes.outputs.core-hash }}-${{ steps.hashes.outputs[format('{0}-hash', inputs.framework)] }}-${{ steps.hashes.outputs.e2e-hash }}
+          lookup-only: true
+
+      - name: Skip tests (cached pass)
+        id: skip-check
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        run: |
+          echo "Tests previously passed with same source hash. Skipping."
+          echo "skipped=true" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: pnpm build
+
+      - name: Cache Playwright browsers
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.skip-check.outputs.skipped != 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Cache Docker image
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: ./.github/actions/docker-cache
+        with:
+          image: ${{ inputs.image }}
+          cache-key-prefix: keycloak-${{ inputs.version }}
+
+      - name: Start Keycloak
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: |
+          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml up -d
+          echo "Waiting for Keycloak to be ready..."
+          timeout 120 bash -c 'until curl -sf http://localhost:${{ inputs.port }}/health/ready; do sleep 2; done'
+          echo "Keycloak is ready!"
+
+      - name: Run E2E framework tests
+        id: tests
+        if: steps.skip-check.outputs.skipped != 'true'
+        env:
+          E2E_FRAMEWORK_TESTS: 'true'
+          VITE_PROVIDER_TYPE: keycloak
+          VITE_PROVIDER_URL: ${{ inputs.provider_url }}
+          VITE_CLIENT_ID: test-spa
+          VITE_KEYCLOAK_REALM: test-realm
+        run: pnpm test:e2e:${{ inputs.framework }}:keycloak:${{ inputs.version }}
+
+      - name: Save cache marker on success
+        if: steps.tests.outcome == 'success'
+        run: |
+          echo "pass" > .cache-marker
+          echo "Saving cache marker for future runs"
+
+      - name: Upload cache marker
+        if: steps.tests.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-marker
+          key: e2e-result-${{ inputs.framework }}-keycloak-${{ inputs.version }}-${{ steps.hashes.outputs.core-hash }}-${{ steps.hashes.outputs[format('{0}-hash', inputs.framework)] }}-${{ steps.hashes.outputs.e2e-hash }}
+
+      - name: Set result output
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.skip-check.outputs.skipped }}" == "true" ]; then
+            echo "result=pass" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.tests.outcome }}" == "success" ]; then
+            echo "result=pass" >> $GITHUB_OUTPUT
+          else
+            echo "result=fail" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always() && steps.skip-check.outputs.skipped != 'true'
+        with:
+          name: e2e-results-${{ inputs.framework }}-keycloak-${{ inputs.version }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Collect logs on failure
+        if: failure() && steps.skip-check.outputs.skipped != 'true'
+        run: |
+          echo "=== Keycloak Logs ==="
+          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml logs --tail 100
+
+      - name: Stop Keycloak
+        if: always() && steps.skip-check.outputs.skipped != 'true'
+        run: docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml down -v
+
+  # Framework tests with Authentik
+  authentik:
+    name: ${{ inputs.framework }} + Authentik ${{ inputs.version }}
+    if: inputs.provider == 'authentik'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      result: ${{ steps.result.outputs.result }}
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: authentik-test-password
+          POSTGRES_USER: authentik
+          POSTGRES_DB: authentik
+        options: >-
+          --health-cmd "pg_isready -d authentik -U authentik"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute source hashes
+        id: hashes
+        uses: ./.github/actions/compute-source-hash
+
+      - name: Check for cached test result
+        id: cache-check
+        if: ${{ !inputs.force-bypass-cache }}
+        uses: actions/cache@v4
+        with:
+          path: .cache-marker
+          key: e2e-result-${{ inputs.framework }}-authentik-${{ inputs.version }}-${{ steps.hashes.outputs.core-hash }}-${{ steps.hashes.outputs[format('{0}-hash', inputs.framework)] }}-${{ steps.hashes.outputs.e2e-hash }}
+          lookup-only: true
+
+      - name: Skip tests (cached pass)
+        id: skip-check
+        if: steps.cache-check.outputs.cache-hit == 'true'
+        run: |
+          echo "Tests previously passed with same source hash. Skipping."
+          echo "skipped=true" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: pnpm build
+
+      - name: Cache Playwright browsers
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.skip-check.outputs.skipped != 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Cache Docker image
+        if: steps.skip-check.outputs.skipped != 'true'
+        uses: ./.github/actions/docker-cache
+        with:
+          image: ${{ inputs.image }}
+          cache-key-prefix: authentik-${{ inputs.version }}
+
+      - name: Start Authentik
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: |
+          docker run -d --name authentik-server \
+            --network host \
+            -e AUTHENTIK_SECRET_KEY=test-secret-key-for-e2e-testing-only \
+            -e AUTHENTIK_REDIS__HOST=localhost \
+            -e AUTHENTIK_POSTGRESQL__HOST=localhost \
+            -e AUTHENTIK_POSTGRESQL__USER=authentik \
+            -e AUTHENTIK_POSTGRESQL__NAME=authentik \
+            -e AUTHENTIK_POSTGRESQL__PASSWORD=authentik-test-password \
+            -e AUTHENTIK_BOOTSTRAP_PASSWORD=adminpassword \
+            -e AUTHENTIK_BOOTSTRAP_EMAIL=admin@example.com \
+            ${{ inputs.image }} \
+            server
+
+          docker run -d --name authentik-worker \
+            --network host \
+            -e AUTHENTIK_SECRET_KEY=test-secret-key-for-e2e-testing-only \
+            -e AUTHENTIK_REDIS__HOST=localhost \
+            -e AUTHENTIK_POSTGRESQL__HOST=localhost \
+            -e AUTHENTIK_POSTGRESQL__USER=authentik \
+            -e AUTHENTIK_POSTGRESQL__NAME=authentik \
+            -e AUTHENTIK_POSTGRESQL__PASSWORD=authentik-test-password \
+            ${{ inputs.image }} \
+            worker
+
+          echo "Waiting for Authentik to be ready..."
+          timeout 120 bash -c 'until curl -sf http://localhost:${{ inputs.port }}/-/health/ready/; do sleep 2; done' || {
+            echo "Authentik failed to start"
+            docker logs authentik-server
+            exit 1
+          }
+          echo "Authentik is ready!"
+
+      - name: Initialize Authentik
+        if: steps.skip-check.outputs.skipped != 'true'
+        run: |
+          npx tsx e2e/testing-infrastructure/provider-init/cli.ts \
+            authentik ${{ inputs.version }} \
+            http://localhost:${{ inputs.port }} \
+            authentik-server
+
+      - name: Run E2E framework tests
+        id: tests
+        if: steps.skip-check.outputs.skipped != 'true'
+        env:
+          E2E_FRAMEWORK_TESTS: 'true'
+          VITE_PROVIDER_TYPE: authentik
+          VITE_PROVIDER_URL: ${{ inputs.provider_url }}
+          VITE_CLIENT_ID: test-spa
+          VITE_AUTHENTIK_SLUG: test-spa
+        run: pnpm test:e2e:${{ inputs.framework }}:authentik:${{ inputs.version }}
+
+      - name: Save cache marker on success
+        if: steps.tests.outcome == 'success'
+        run: |
+          echo "pass" > .cache-marker
+          echo "Saving cache marker for future runs"
+
+      - name: Upload cache marker
+        if: steps.tests.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-marker
+          key: e2e-result-${{ inputs.framework }}-authentik-${{ inputs.version }}-${{ steps.hashes.outputs.core-hash }}-${{ steps.hashes.outputs[format('{0}-hash', inputs.framework)] }}-${{ steps.hashes.outputs.e2e-hash }}
+
+      - name: Set result output
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.skip-check.outputs.skipped }}" == "true" ]; then
+            echo "result=pass" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.tests.outcome }}" == "success" ]; then
+            echo "result=pass" >> $GITHUB_OUTPUT
+          else
+            echo "result=fail" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always() && steps.skip-check.outputs.skipped != 'true'
+        with:
+          name: e2e-results-${{ inputs.framework }}-authentik-${{ inputs.version }}
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+      - name: Collect logs on failure
+        if: failure() && steps.skip-check.outputs.skipped != 'true'
+        run: |
+          echo "=== Authentik Server Logs ==="
+          docker logs authentik-server 2>&1 | tail -100
+          echo ""
+          echo "=== Authentik Worker Logs ==="
+          docker logs authentik-worker 2>&1 | tail -100
+
+      - name: Stop Authentik
+        if: always() && steps.skip-check.outputs.skipped != 'true'
+        run: |
+          docker stop authentik-server authentik-worker 2>/dev/null || true
+          docker rm authentik-server authentik-worker 2>/dev/null || true

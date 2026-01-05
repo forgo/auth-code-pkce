@@ -1,4 +1,4 @@
-import React, { type ReactNode } from "react";
+import React, { useRef, useEffect, type ReactNode } from "react";
 import { useAuth } from "../hooks/useAuth.js";
 
 /**
@@ -37,18 +37,37 @@ export function AuthGuard({
   redirectToLogin = false,
 }: AuthGuardProps): React.ReactNode {
   const { isAuthenticated, isLoading, login } = useAuth();
+  const hasInitiatedLogin = useRef(false);
 
-  // Still loading, show nothing or fallback
-  if (isLoading) {
+  // Handle redirect to login in useEffect (not during render)
+  // This ensures StrictMode compatibility - side effects belong in effects
+  useEffect(() => {
+    if (
+      !isAuthenticated &&
+      !isLoading &&
+      redirectToLogin &&
+      !hasInitiatedLogin.current
+    ) {
+      hasInitiatedLogin.current = true;
+      login({ preservePath: true });
+    }
+  }, [isAuthenticated, isLoading, redirectToLogin, login]);
+
+  // Reset the ref when the component would need to re-initiate login
+  // (e.g., after logout and re-mount)
+  useEffect(() => {
+    if (isAuthenticated) {
+      hasInitiatedLogin.current = false;
+    }
+  }, [isAuthenticated]);
+
+  // Still loading, or waiting for redirect to login
+  if (isLoading || (!isAuthenticated && redirectToLogin)) {
     return <>{fallback}</>;
   }
 
-  // Not authenticated
+  // Not authenticated (without redirect)
   if (!isAuthenticated) {
-    if (redirectToLogin) {
-      login({ preservePath: true });
-      return <>{fallback}</>;
-    }
     return <>{fallback}</>;
   }
 

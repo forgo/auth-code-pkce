@@ -126,13 +126,23 @@ export function AuthProvider<
   );
 
   // Initialize client on mount
+  // Uses cancellation pattern for StrictMode compatibility
   useEffect(() => {
+    let cancelled = false;
+
     client.initialize().then(() => {
+      // Don't proceed if the effect was cleaned up (StrictMode double-mount)
+      if (cancelled) return;
+
       const currentState = client.getState();
       if (autoLogin && !currentState.isAuthenticated && !currentState.isLoading) {
         client.authorize({ preservePath: true });
       }
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, autoLogin]);
 
   // Memoized callbacks

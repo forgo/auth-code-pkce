@@ -118,6 +118,11 @@ export function createOAuthClient<
   // Token refresh coordinator
   const refreshCoordinator = new TokenRefreshCoordinator();
 
+  // Idempotency tracking for StrictMode compatibility
+  let initializePromise: Promise<void> | null = null;
+  let isInitialized = false;
+  let handleCallbackPromise: Promise<void> | null = null;
+
   // Helper to update state and notify listeners
   function setState(updates: Partial<AuthState<TJwt, TUser>>): void {
     state = { ...state, ...updates };
@@ -166,34 +171,54 @@ export function createOAuthClient<
     },
 
     async initialize(): Promise<void> {
-      // Check if this is a callback URL
-      if (isCallbackUrl(provider.redirectUri)) {
-        await client.handleCallback();
+      // Idempotency: if already initialized, return immediately
+      if (isInitialized) {
         return;
       }
 
-      // Check for existing tokens
-      const tokens = getStoredTokens(storage);
-      if (tokens) {
-        // Check if access token is expired
-        if (tokens.expiresAt && tokens.expiresAt < Date.now()) {
-          // Try to refresh
-          const refreshed = await client.refreshToken();
-          if (!refreshed) {
-            // Refresh failed, clear tokens
-            clearTokens(storage);
-            setState({ isLoading: false });
-            return;
-          }
-        } else {
-          // Tokens are valid
-          await loadUserFromTokens(tokens);
-          return;
-        }
+      // Idempotency: if initialization is in progress, return the existing promise
+      // This handles React StrictMode's double-mounting behavior
+      if (initializePromise) {
+        return initializePromise;
       }
 
-      // No tokens
-      setState({ isLoading: false });
+      initializePromise = (async () => {
+        // Check if this is a callback URL
+        if (isCallbackUrl(provider.redirectUri)) {
+          await client.handleCallback();
+          return;
+        }
+
+        // Check for existing tokens
+        const tokens = getStoredTokens(storage);
+        if (tokens) {
+          // Check if access token is expired
+          if (tokens.expiresAt && tokens.expiresAt < Date.now()) {
+            // Try to refresh
+            const refreshed = await client.refreshToken();
+            if (!refreshed) {
+              // Refresh failed, clear tokens
+              clearTokens(storage);
+              setState({ isLoading: false });
+              return;
+            }
+          } else {
+            // Tokens are valid
+            await loadUserFromTokens(tokens);
+            return;
+          }
+        }
+
+        // No tokens
+        setState({ isLoading: false });
+      })();
+
+      try {
+        await initializePromise;
+        isInitialized = true;
+      } finally {
+        initializePromise = null;
+      }
     },
 
     authorize(options?: AuthorizeOptions): void {
@@ -201,30 +226,49 @@ export function createOAuthClient<
     },
 
     async handleCallback(url?: string): Promise<void> {
-      setState({ isLoading: true });
-
-      const result = await exchangeCodeForTokens(
-        provider,
-        storage,
-        httpClient,
-        url
-      );
-
-      if ("error" in result) {
-        handleError(result.error);
+      // Idempotency: if already authenticated, skip
+      // This handles React StrictMode's double-mounting behavior
+      if (state.isAuthenticated) {
         return;
       }
 
-      await loadUserFromTokens(result.tokens);
+      // Idempotency: if callback handling is in progress, return existing promise
+      if (handleCallbackPromise) {
+        return handleCallbackPromise;
+      }
 
-      // Redirect to pre-auth path
-      if (typeof window !== "undefined") {
-        const redirectPath = result.preAuthPath || "/";
-        window.history.replaceState(
-          null,
-          "",
-          `${getCurrentOrigin()}${redirectPath}`
+      handleCallbackPromise = (async () => {
+        setState({ isLoading: true });
+
+        const result = await exchangeCodeForTokens(
+          provider,
+          storage,
+          httpClient,
+          url
         );
+
+        if ("error" in result) {
+          handleError(result.error);
+          return;
+        }
+
+        await loadUserFromTokens(result.tokens);
+
+        // Redirect to pre-auth path
+        if (typeof window !== "undefined") {
+          const redirectPath = result.preAuthPath || "/";
+          window.history.replaceState(
+            null,
+            "",
+            `${getCurrentOrigin()}${redirectPath}`
+          );
+        }
+      })();
+
+      try {
+        await handleCallbackPromise;
+      } finally {
+        handleCallbackPromise = null;
       }
     },
 

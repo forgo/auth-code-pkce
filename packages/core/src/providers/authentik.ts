@@ -24,8 +24,12 @@ export const authentik: ProviderPreset = ({
   scopes = DEFAULT_SCOPES,
   postLogoutRedirectUri,
 }: ProviderPresetConfig): ProviderConfig => {
-  // Normalize issuer URL
+  // Normalize issuer URL (e.g., http://localhost:9024/application/o/my-app)
   const normalizedIssuer = issuer.replace(/\/$/, "");
+
+  // Authentik uses global endpoints for auth/token but per-app for end-session
+  // Extract base URL: http://localhost:9024/application/o from issuer
+  const baseUrl = normalizedIssuer.replace(/\/[^/]+$/, "");
 
   return {
     issuer: normalizedIssuer,
@@ -34,11 +38,13 @@ export const authentik: ProviderPreset = ({
     scopes,
     postLogoutRedirectUri,
     endpoints: {
-      authorizationEndpoint: `${normalizedIssuer}/authorize/`,
-      tokenEndpoint: `${normalizedIssuer}/token/`,
+      // Global endpoints (not per-application)
+      authorizationEndpoint: `${baseUrl}/authorize/`,
+      tokenEndpoint: `${baseUrl}/token/`,
+      userInfoEndpoint: `${baseUrl}/userinfo/`,
+      revocationEndpoint: `${baseUrl}/revoke/`,
+      // Per-application endpoint
       logoutEndpoint: `${normalizedIssuer}/end-session/`,
-      userInfoEndpoint: `${normalizedIssuer}/userinfo/`,
-      revocationEndpoint: `${normalizedIssuer}/revoke/`,
     },
   };
 };

@@ -83,3 +83,12 @@ export {
   buildLogoutUrl,
   logout,
 } from "./oauth/index.js";
+
+// Providers
+export {
+  okta,
+  auth0,
+  keycloak,
+  authentik,
+  generic,
+} from "./providers/index.js";

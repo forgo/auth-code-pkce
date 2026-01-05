@@ -1,0 +1,47 @@
+name: 'Docker Image Cache'
+description: 'Cache Docker images to avoid rate limiting and speed up CI'
+
+inputs:
+  image:
+    description: 'Docker image to cache (e.g., quay.io/keycloak/keycloak:24.0)'
+    required: true
+  cache-key-prefix:
+    description: 'Prefix for cache key (e.g., keycloak-v24)'
+    required: true
+
+outputs:
+  cache-hit:
+    description: 'Whether the image was loaded from cache'
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache Docker image
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: /tmp/docker-cache/${{ inputs.cache-key-prefix }}.tar
+        key: docker-${{ runner.os }}-${{ inputs.cache-key-prefix }}-${{ hashFiles('.github/workflows/*.yml') }}
+        restore-keys: |
+          docker-${{ runner.os }}-${{ inputs.cache-key-prefix }}-
+
+    - name: Load cached image
+      if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        echo "Loading cached Docker image..."
+        docker load -i /tmp/docker-cache/${{ inputs.cache-key-prefix }}.tar
+        echo "Cached image loaded successfully"
+
+    - name: Pull and cache image
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "Pulling Docker image: ${{ inputs.image }}"
+        docker pull ${{ inputs.image }}
+
+        echo "Saving image to cache..."
+        mkdir -p /tmp/docker-cache
+        docker save -o /tmp/docker-cache/${{ inputs.cache-key-prefix }}.tar ${{ inputs.image }}
+        echo "Image saved to cache"

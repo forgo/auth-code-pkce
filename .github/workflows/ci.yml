@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test --coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+  # E2E tests run after lint, test, and build pass
+  # Uses latest version of each provider
+  e2e-keycloak:
+    name: E2E (Keycloak)
+    needs: [lint, test, build]
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: keycloak
+      version: v26
+      port: '8026'
+      image: quay.io/keycloak/keycloak:26.0.7
+
+  e2e-authentik:
+    name: E2E (Authentik)
+    needs: [lint, test, build]
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: authentik
+      version: v2025-6
+      port: '9026'
+      image: ghcr.io/goauthentik/server:2025.6.1
+
+  # Framework integration tests (test actual library usage)
+  # Uses latest version of Keycloak for framework tests
+  e2e-react:
+    name: E2E (React + Keycloak)
+    needs: [lint, test, build]
+    uses: ./.github/workflows/e2e-framework.yml
+    with:
+      framework: react
+      provider: keycloak
+      version: v26
+      port: '8026'
+      image: quay.io/keycloak/keycloak:26.0.7
+      provider_url: http://localhost:8026
+
+  e2e-vue:
+    name: E2E (Vue + Keycloak)
+    needs: [lint, test, build]
+    uses: ./.github/workflows/e2e-framework.yml
+    with:
+      framework: vue
+      provider: keycloak
+      version: v26
+      port: '8026'
+      image: quay.io/keycloak/keycloak:26.0.7
+      provider_url: http://localhost:8026
+
+  e2e-svelte:
+    name: E2E (Svelte + Keycloak)
+    needs: [lint, test, build]
+    uses: ./.github/workflows/e2e-framework.yml
+    with:
+      framework: svelte
+      provider: keycloak
+      version: v26
+      port: '8026'
+      image: quay.io/keycloak/keycloak:26.0.7
+      provider_url: http://localhost:8026

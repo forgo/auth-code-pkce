@@ -62,6 +62,7 @@ export function createFetchHttpClient(): HttpClient {
         headers: req.headers,
         body:
           req.body instanceof URLSearchParams ? req.body.toString() : req.body,
+        mode: 'cors',
       });
 
       let data: T;

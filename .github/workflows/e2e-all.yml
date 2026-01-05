@@ -1,0 +1,134 @@
+name: E2E - All Providers (Nightly)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force-bypass-cache:
+        description: 'Force run all tests even if cache indicates pass'
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    # Run nightly at 3 AM UTC
+    - cron: '0 3 * * *'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Run all provider versions in parallel
+  keycloak-v24:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: keycloak
+      version: v24
+      port: '8024'
+      image: quay.io/keycloak/keycloak:24.0.5
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  keycloak-v25:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: keycloak
+      version: v25
+      port: '8025'
+      image: quay.io/keycloak/keycloak:25.0.6
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  keycloak-v26:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: keycloak
+      version: v26
+      port: '8026'
+      image: quay.io/keycloak/keycloak:26.0.7
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  authentik-v2024-8:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: authentik
+      version: v2024-8
+      port: '9024'
+      image: ghcr.io/goauthentik/server:2024.8.3
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  authentik-v2024-12:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: authentik
+      version: v2024-12
+      port: '9025'
+      image: ghcr.io/goauthentik/server:2024.12.2
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  authentik-v2025-6:
+    uses: ./.github/workflows/e2e-provider.yml
+    with:
+      provider: authentik
+      version: v2025-6
+      port: '9026'
+      image: ghcr.io/goauthentik/server:2025.6.1
+      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
+
+  # Generate and publish compatibility matrix
+  publish-matrix:
+    name: Publish Compatibility Matrix
+    needs:
+      - keycloak-v24
+      - keycloak-v25
+      - keycloak-v26
+      - authentik-v2024-8
+      - authentik-v2024-12
+      - authentik-v2025-6
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: e2e-results-*
+
+      - name: Generate compatibility matrix
+        run: |
+          node scripts/generate-compatibility-matrix.js \
+            --keycloak-v24="${{ needs.keycloak-v24.outputs.result || 'unknown' }}" \
+            --keycloak-v25="${{ needs.keycloak-v25.outputs.result || 'unknown' }}" \
+            --keycloak-v26="${{ needs.keycloak-v26.outputs.result || 'unknown' }}" \
+            --authentik-v2024-8="${{ needs.authentik-v2024-8.outputs.result || 'unknown' }}" \
+            --authentik-v2024-12="${{ needs.authentik-v2024-12.outputs.result || 'unknown' }}" \
+            --authentik-v2025-6="${{ needs.authentik-v2025-6.outputs.result || 'unknown' }}"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: compatibility-site/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

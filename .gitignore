@@ -22,8 +22,18 @@ pnpm-debug.log*
 
 # Testing
 coverage/
+html/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
 
 # Environment
 .env
 .env.local
 .env.*.local
+
+# Generated sites
+compatibility-site/
