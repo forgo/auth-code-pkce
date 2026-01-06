@@ -1,15 +1,33 @@
 import { keycloak, authentik, type ProviderConfig } from '@auth-code-pkce/core';
 
 /**
- * App configuration from URL params or environment variables
+ * Base configuration shared by all providers
  */
-export interface AppConfig {
-  providerType: 'keycloak' | 'authentik';
+interface BaseAppConfig {
   providerUrl: string;
   clientId: string;
+}
+
+/**
+ * Keycloak-specific configuration
+ */
+export interface KeycloakAppConfig extends BaseAppConfig {
+  providerType: 'keycloak';
   realm: string;
+}
+
+/**
+ * Authentik-specific configuration
+ */
+export interface AuthentikAppConfig extends BaseAppConfig {
+  providerType: 'authentik';
   applicationSlug: string;
 }
+
+/**
+ * App configuration - discriminated union of provider-specific configs
+ */
+export type AppConfig = KeycloakAppConfig | AuthentikAppConfig;
 
 /**
  * Get a config value from URL search params, localStorage, or env vars (in that order)
@@ -44,21 +62,36 @@ function getConfigValue(key: string, envKey: string, defaultValue: string): stri
 
 /**
  * Get app configuration - reads from URL params first (for tests), then env vars
+ * Returns provider-specific config based on providerType
  */
 export function getAppConfig(): AppConfig {
-  return {
-    providerType: getConfigValue('providerType', 'VITE_PROVIDER_TYPE', 'keycloak') as
-      | 'keycloak'
-      | 'authentik',
+  const providerType = getConfigValue('providerType', 'VITE_PROVIDER_TYPE', 'keycloak') as
+    | 'keycloak'
+    | 'authentik';
+
+  const base = {
     providerUrl: getConfigValue('providerUrl', 'VITE_PROVIDER_URL', 'http://localhost:8026'),
     clientId: getConfigValue('clientId', 'VITE_CLIENT_ID', 'test-spa'),
-    realm: getConfigValue('realm', 'VITE_KEYCLOAK_REALM', 'test-realm'),
+  };
+
+  if (providerType === 'keycloak') {
+    return {
+      ...base,
+      providerType: 'keycloak',
+      realm: getConfigValue('realm', 'VITE_KEYCLOAK_REALM', 'test-realm'),
+    };
+  }
+
+  return {
+    ...base,
+    providerType: 'authentik',
     applicationSlug: getConfigValue('slug', 'VITE_AUTHENTIK_SLUG', 'test-spa'),
   };
 }
 
 /**
  * Build provider configuration from app config
+ * Uses TypeScript type narrowing with discriminated union
  */
 export function buildProviderConfig(config: AppConfig): ProviderConfig {
   const redirectUri = `${window.location.origin}/callback`;
@@ -68,6 +101,7 @@ export function buildProviderConfig(config: AppConfig): ProviderConfig {
   const scopes = ['openid', 'profile', 'email'];
 
   if (config.providerType === 'keycloak') {
+    // TypeScript knows config is KeycloakAppConfig here
     return keycloak({
       issuer: `${config.providerUrl}/realms/${config.realm}`,
       clientId: config.clientId,
@@ -77,7 +111,7 @@ export function buildProviderConfig(config: AppConfig): ProviderConfig {
     });
   }
 
-  // Authentik
+  // TypeScript knows config is AuthentikAppConfig here
   return authentik({
     issuer: `${config.providerUrl}/application/o/${config.applicationSlug}`,
     clientId: config.clientId,
