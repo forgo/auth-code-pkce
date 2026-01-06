@@ -100,7 +100,7 @@ jobs:
       - name: Start Keycloak
         if: steps.skip-check.outputs.skipped != 'true'
         run: |
-          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml up -d --wait --wait-timeout 180
+          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml up -d --wait --wait-timeout 300
           echo "Keycloak is ready!"
 
       - name: Run E2E tests
@@ -282,6 +282,8 @@ jobs:
             exit 1
           }
           echo "Authentik is ready!"
+          echo "Waiting for Authentik to fully initialize..."
+          sleep 10
 
       - name: Initialize Authentik
         if: steps.skip-check.outputs.skipped != 'true'
