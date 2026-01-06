@@ -259,6 +259,7 @@ jobs:
             -e AUTHENTIK_POSTGRESQL__PASSWORD=authentik-test-password \
             -e AUTHENTIK_BOOTSTRAP_PASSWORD=adminpassword \
             -e AUTHENTIK_BOOTSTRAP_EMAIL=admin@example.com \
+            -e AUTHENTIK_LISTEN__HTTP=0.0.0.0:${{ inputs.port }} \
             ${{ inputs.image }} \
             server
 

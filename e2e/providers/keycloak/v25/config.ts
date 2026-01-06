@@ -14,7 +14,7 @@ export const keycloakConfig: ProviderConfig = {
     token: `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/token`,
     userinfo: `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/userinfo`,
     logout: `${KEYCLOAK_URL}/realms/${REALM}/protocol/openid-connect/logout`,
-    health: `${KEYCLOAK_URL}/health/ready`,
+    // Health endpoint is on management port 9000, not exposed
   },
 
   client: {
