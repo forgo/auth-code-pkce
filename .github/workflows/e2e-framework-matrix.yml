@@ -18,17 +18,6 @@ concurrency:
 
 jobs:
   # React framework tests
-  react-keycloak-v24:
-    uses: ./.github/workflows/e2e-framework.yml
-    with:
-      framework: react
-      provider: keycloak
-      version: v24
-      port: '8024'
-      image: quay.io/keycloak/keycloak:24.0.5
-      provider_url: http://localhost:8024
-      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
-
   react-keycloak-v25:
     uses: ./.github/workflows/e2e-framework.yml
     with:
@@ -85,17 +74,6 @@ jobs:
       force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
 
   # Vue framework tests
-  vue-keycloak-v24:
-    uses: ./.github/workflows/e2e-framework.yml
-    with:
-      framework: vue
-      provider: keycloak
-      version: v24
-      port: '8024'
-      image: quay.io/keycloak/keycloak:24.0.5
-      provider_url: http://localhost:8024
-      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
-
   vue-keycloak-v25:
     uses: ./.github/workflows/e2e-framework.yml
     with:
@@ -152,17 +130,6 @@ jobs:
       force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
 
   # Svelte framework tests
-  svelte-keycloak-v24:
-    uses: ./.github/workflows/e2e-framework.yml
-    with:
-      framework: svelte
-      provider: keycloak
-      version: v24
-      port: '8024'
-      image: quay.io/keycloak/keycloak:24.0.5
-      provider_url: http://localhost:8024
-      force-bypass-cache: ${{ inputs.force-bypass-cache || false }}
-
   svelte-keycloak-v25:
     uses: ./.github/workflows/e2e-framework.yml
     with:
@@ -223,19 +190,16 @@ jobs:
     name: Generate Compatibility Matrix
     runs-on: ubuntu-latest
     needs:
-      - react-keycloak-v24
       - react-keycloak-v25
       - react-keycloak-v26
       - react-authentik-v2024-8
       - react-authentik-v2024-12
       - react-authentik-v2025-6
-      - vue-keycloak-v24
       - vue-keycloak-v25
       - vue-keycloak-v26
       - vue-authentik-v2024-8
       - vue-authentik-v2024-12
       - vue-authentik-v2025-6
-      - svelte-keycloak-v24
       - svelte-keycloak-v25
       - svelte-keycloak-v26
       - svelte-authentik-v2024-8
@@ -256,11 +220,11 @@ jobs:
           cat > framework-compatibility.md << 'EOF'
           # Framework Compatibility Matrix
 
-          | Framework | Keycloak 24 | Keycloak 25 | Keycloak 26 | Authentik 2024.8 | Authentik 2024.12 | Authentik 2025.6 |
-          |-----------|-------------|-------------|-------------|------------------|-------------------|------------------|
-          | React     | ${{ needs.react-keycloak-v24.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
-          | Vue       | ${{ needs.vue-keycloak-v24.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
-          | Svelte    | ${{ needs.svelte-keycloak-v24.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
+          | Framework | Keycloak 25 | Keycloak 26 | Authentik 2024.8 | Authentik 2024.12 | Authentik 2025.6 |
+          |-----------|-------------|-------------|------------------|-------------------|------------------|
+          | React     | ${{ needs.react-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.react-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
+          | Vue       | ${{ needs.vue-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.vue-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
+          | Svelte    | ${{ needs.svelte-keycloak-v25.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-keycloak-v26.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2024-8.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2024-12.outputs.result == 'pass' && '✅' || '❌' }} | ${{ needs.svelte-authentik-v2025-6.outputs.result == 'pass' && '✅' || '❌' }} |
 
           Generated: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           EOF
