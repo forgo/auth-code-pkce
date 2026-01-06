@@ -100,7 +100,7 @@ jobs:
       - name: Start Keycloak
         if: steps.skip-check.outputs.skipped != 'true'
         run: |
-          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml up -d --wait --wait-timeout 120
+          docker compose -f e2e/providers/keycloak/${{ inputs.version }}/docker-compose.yml up -d --wait --wait-timeout 180
           echo "Keycloak is ready!"
 
       - name: Run E2E tests

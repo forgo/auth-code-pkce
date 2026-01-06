@@ -1,6 +1,9 @@
-import { useMemo } from 'react';
-import { AuthProvider, useAuth } from '@auth-code-pkce/react';
-import { getAppConfig, buildProviderConfig } from '@auth-code-pkce/test-app-shared';
+import { AuthProvider, useAuth } from "@auth-code-pkce/react";
+import {
+  buildProviderConfig,
+  getAppConfig,
+} from "@auth-code-pkce/test-app-shared";
+import { useMemo } from "react";
 
 function AuthStatus() {
   const { isAuthenticated, isLoading, jwt, error, login, logout } = useAuth();

@@ -15,12 +15,25 @@ export type AuthentikVersion = '2024.8' | '2024.12' | '2025.6';
 export type KeycloakVersion = '24' | '25' | '26';
 
 /**
+ * Normalize Authentik version string to canonical format (e.g., "2024.8")
+ * Accepts formats: "v2024-8", "2024-8", "v2024.8", "2024.8"
+ */
+function normalizeAuthentikVersion(version: string): AuthentikVersion {
+  // Remove leading 'v' if present
+  const stripped = version.replace(/^v/, '');
+  // Replace hyphen with dot
+  const normalized = stripped.replace('-', '.');
+  return normalized as AuthentikVersion;
+}
+
+/**
  * Create an Authentik initializer for a specific version
  */
 export function createAuthentikInitializer(
-  version: AuthentikVersion
+  version: string
 ): ProviderInitializer {
-  switch (version) {
+  const normalizedVersion = normalizeAuthentikVersion(version);
+  switch (normalizedVersion) {
     case '2024.8':
       return new Authentik2024_8Initializer();
     case '2024.12':
@@ -28,7 +41,7 @@ export function createAuthentikInitializer(
     case '2025.6':
       return new Authentik2025_6Initializer();
     default:
-      throw new Error(`Unknown Authentik version: ${version}`);
+      throw new Error(`Unknown Authentik version: ${version} (normalized: ${normalizedVersion})`);
   }
 }
 
