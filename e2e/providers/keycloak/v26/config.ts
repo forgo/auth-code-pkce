@@ -34,7 +34,7 @@ export const keycloakConfig: ProviderConfig = {
     usernameInput: '#username',
     passwordInput: '#password',
     submitButton: '#kc-login',
-    // Keycloak v26 uses inline error messages below the input field
-    errorMessage: '[class*="helper-text"], .alert-error, #input-error',
+    // Keycloak v26 uses inline error messages with kc-feedback-text class
+    errorMessage: '.kc-feedback-text',
   },
 };

@@ -17,6 +17,41 @@ import { defineConfig, devices } from '@playwright/test';
 // Environment variable to enable framework test web servers
 const enableFrameworkApps = process.env.E2E_FRAMEWORK_TESTS === 'true';
 
+// Define web servers based on test mode
+const webServers = [];
+
+// Always include callback server for provider tests (port 3000)
+webServers.push({
+  command: 'npx tsx ./providers/callback-server.ts',
+  port: 3000,
+  reuseExistingServer: !process.env.CI,
+  timeout: 10000,
+});
+
+// Add framework app servers when running framework tests
+if (enableFrameworkApps) {
+  webServers.push(
+    {
+      command: 'pnpm --filter @auth-code-pkce/test-app-react dev',
+      port: 3010,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+    {
+      command: 'pnpm --filter @auth-code-pkce/test-app-vue dev',
+      port: 3011,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    },
+    {
+      command: 'pnpm --filter @auth-code-pkce/test-app-svelte dev',
+      port: 3012,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120000,
+    }
+  );
+}
+
 export default defineConfig({
   testDir: './providers',
   testMatch: '**/*.spec.ts',
@@ -36,30 +71,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
 
-  // Web servers for framework test apps (only when running framework tests)
-  // Provider config is passed via URL params, so we don't need env vars here
-  webServer: enableFrameworkApps
-    ? [
-        {
-          command: 'pnpm --filter @auth-code-pkce/test-app-react dev',
-          port: 3010,
-          reuseExistingServer: !process.env.CI,
-          timeout: 120000,
-        },
-        {
-          command: 'pnpm --filter @auth-code-pkce/test-app-vue dev',
-          port: 3011,
-          reuseExistingServer: !process.env.CI,
-          timeout: 120000,
-        },
-        {
-          command: 'pnpm --filter @auth-code-pkce/test-app-svelte dev',
-          port: 3012,
-          reuseExistingServer: !process.env.CI,
-          timeout: 120000,
-        },
-      ]
-    : undefined,
+  webServer: webServers,
 
   projects: [
     // Keycloak versions
